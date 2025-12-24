@@ -1,5 +1,6 @@
 import { ApiClient } from "./ApiClient";
 import { messageResponse, PlaybackState, TimerResponse } from "../models/OnTimeModels";
+import e from "express";
 
 export class OntimeWrapper {
     constructor(private apiClient: ApiClient) { }
@@ -29,9 +30,15 @@ export class OntimeWrapper {
         };
     }
 
+    private encodeURIComponent(text: string): string {
+        // only encode spaces
+        return text.replace(/ /g, "%20");
+    }
+
 
     async setSecondaryText(text: string): Promise<boolean | Error> {
-        const rawResult: any = await this.apiClient.get(`/api/message/secondary/${encodeURIComponent(text)}`);
+        console.log("Setting secondary text to:", this.encodeURIComponent(text));
+        const rawResult: any = await this.apiClient.get(`/api/message/secondary/${this.encodeURIComponent(text)}`);
         const result: messageResponse = this.mapMessageResponse(rawResult);
 
         if (result.secondary !== text) {
@@ -40,7 +47,6 @@ export class OntimeWrapper {
 
         return true;
     }
-
 
     async setSecondaryVisibility(visible: boolean): Promise<boolean | Error> {
         const source = visible ? 'secondary' : 'off';
@@ -71,6 +77,16 @@ export class OntimeWrapper {
     async getVersion(): Promise<string> {
         const result: any = await this.apiClient.get(`/api/version`);
         return result.version;
+    }
+
+    async getCurrentEventID(): Promise<string | null> {
+        const result: any = await this.apiClient.get(`/api/poll`);
+        return result.payload.eventNow.id ?? null;
+    }
+
+    async getNextEventID(): Promise<string | null> {
+        const result: any = await this.apiClient.get(`/api/poll`);
+        return result.payload.eventNext.id ?? null;
     }
 
 }

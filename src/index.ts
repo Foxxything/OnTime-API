@@ -3,6 +3,7 @@ import "dotenv/config";
 import { env } from "./env";
 
 import { OntimeWrapper } from "./OnTime/OntimeWrapper";
+import { sha256 } from "./sha256";
 
 import { DbClient } from "./DB/DbClient";
 import { ApiClient } from "./OnTime/ApiClient";
@@ -39,27 +40,57 @@ app.get("/health", async (req: Request, res: Response) => {
 });
 
 app.get("/next-actors-no-current", async (request: Request, response: Response) => {
-    const eventIDQuery = request.query.eventID;
-
-    // Validate the query parameter
+    let eventIDQuery: any = request.query.eventID;
     if (!eventIDQuery || Array.isArray(eventIDQuery)) {
-        return response.status(400).json({ error: "Missing or invalid eventID parameter" });
+        eventIDQuery = await ontimeWrapper.getCurrentEventID();
+    }
+
+    const providedKey = request.query.key;
+    const visible = request.query.visible === 'true';
+
+    const expectedKey = sha256(env.DB_PASSWORD);
+
+    if (providedKey !== expectedKey) {
+        return response.status(403).json({ error: "Invalid API key" });
     }
 
     const eventID = String(eventIDQuery); // safely cast to string
 
     try {
         const actors = await dbClient.fetchNextActorsWithoutCurrent(eventID);
+        console.log("Fetched actors:", actors);
+        if (actors.length == 0) {
+            return response.status(404).json({ error: "No upcoming actors found" });
+        }
+
+        ontimeWrapper.setSecondaryText(`Get ready: ${actors.join(", ")}`).catch((err) => {
+            response.status(500).json({ error: `Failed to set secondary text: ${err.message}` });
+        });
+        ontimeWrapper.setSecondaryVisibility(visible).catch((err) => {
+            response.status(500).json({ error: `Failed to set secondary visibility: ${err.message}` });
+        });
         response.status(200).json({ actors });
+
     } catch (error: any) {
         response.status(500).json({ error: error.message });
     }
 });
 
 app.get("/next-actors", async (request: Request, response: Response) => {
-    const eventIDQuery = request.query.eventID;
+    let eventIDQuery: any = request.query.eventID;
+    if (!eventIDQuery || Array.isArray(eventIDQuery)) {
+        eventIDQuery = await ontimeWrapper.getCurrentEventID();
+    }
+    
+    const providedKey = request.query.key;
+    const visible = request.query.visible === 'true';
 
-    // Validate the query parameter
+    const expectedKey = sha256(env.DB_PASSWORD);
+
+    if (providedKey !== expectedKey) {
+        return response.status(403).json({ error: "Invalid API key" });
+    }
+
     if (!eventIDQuery || Array.isArray(eventIDQuery)) {
         return response.status(400).json({ error: "Missing or invalid eventID parameter" });
     }
@@ -68,6 +99,17 @@ app.get("/next-actors", async (request: Request, response: Response) => {
 
     try {
         const actors = await dbClient.fetchNextActors(eventID);
+        console.log("Fetched actors:", actors);
+        if (actors.length == 0) {
+            return response.status(404).json({ error: "No upcoming actors found for the given eventID" });
+        }
+
+        ontimeWrapper.setSecondaryText(`Get ready: ${actors.join(", ")}`).catch((err) => {
+            response.status(500).json({ error: `Failed to set secondary text: ${err.message}` });
+        });
+        ontimeWrapper.setSecondaryVisibility(visible).catch((err) => {
+            response.status(500).json({ error: `Failed to set secondary visibility: ${err.message}` });
+        });
         response.status(200).json({ actors });
     } catch (error: any) {
         response.status(500).json({ error: error.message });
